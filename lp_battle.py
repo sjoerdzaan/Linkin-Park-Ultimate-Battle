@@ -1,8 +1,9 @@
 import streamlit as st
 import random
 import pandas as pd
+import math
 
-# ---- Jouw playlist (titels + artiesten) ----
+# ---- Playlist (103 nummers) ----
 songs = [
     "In the End – Linkin Park",
     "What I’ve Done – Linkin Park",
@@ -109,50 +110,45 @@ songs = [
     "In Pieces – Linkin Park",
 ]
 
+# ---- Elo instellingen ----
+K = 32  # hoe sterk ratings veranderen
+
 # ---- Init state ----
-if "pairs" not in st.session_state:
-    pairs = [(a, b) for i, a in enumerate(songs) for b in songs[i+1:]]
-    random.shuffle(pairs)
-    st.session_state.pairs = pairs
-if "wins" not in st.session_state:
-    st.session_state.wins = {song: 0 for song in songs}
+if "ratings" not in st.session_state:
+    st.session_state.ratings = {song: 1000 for song in songs}
+if "history" not in st.session_state:
+    st.session_state.history = []
 
-st.title("🎶 Linkin Park Playlist Battle Ranking")
+def elo_update(winner, loser):
+    Ra = st.session_state.ratings[winner]
+    Rb = st.session_state.ratings[loser]
+    Ea = 1 / (1 + math.pow(10, (Rb - Ra) / 400))
+    Eb = 1 / (1 + math.pow(10, (Ra - Rb) / 400))
+    st.session_state.ratings[winner] = Ra + K * (1 - Ea)
+    st.session_state.ratings[loser] = Rb + K * (0 - Eb)
 
-if st.session_state.pairs:
-    a, b = st.session_state.pairs.pop()
-    st.write("Kies welke je beter vindt:")
-    col1, col2 = st.columns(2)
-    if col1.button(a):
-        st.session_state.wins[a] += 1
-    if col2.button(b):
-        st.session_state.wins[b] += 1
-else:
-    st.success("✅ Alle battles gedaan!")
-    ranked = sorted(st.session_state.wins.items(), key=lambda x: x[1], reverse=True)
-    st.subheader("Eindranking")
+st.title("🎶 Linkin Park Playlist Battle (Elo Ranking)")
 
-    # Toon ranking
-    for i, (song, score) in enumerate(ranked, start=1):
-        st.write(f"{i}. {song} ({score} punten)")
+# ---- Battle ----
+a, b = random.sample(songs, 2)
+st.write("Kies welke je beter vindt:")
+col1, col2 = st.columns(2)
+if col1.button(a):
+    elo_update(a, b)
+    st.session_state.history.append((a, b))
+    st.rerun()
+if col2.button(b):
+    elo_update(b, a)
+    st.session_state.history.append((b, a))
+    st.rerun()
 
-    # Maak DataFrame
-    df = pd.DataFrame(ranked, columns=["Song", "Score"])
+# ---- Huidige ranking ----
+st.subheader("📊 Huidige ranking")
+ranked = sorted(st.session_state.ratings.items(), key=lambda x: x[1], reverse=True)
+for i, (song, rating) in enumerate(ranked, 1):
+    st.write(f"{i}. {song} ({int(rating)} Elo)")
 
-    # Downloadknoppen
-    csv = df.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        label="⬇️ Download als CSV",
-        data=csv,
-        file_name="ranking.csv",
-        mime="text/csv",
-    )
-
-    excel = df.to_excel("ranking.xlsx", index=False)
-    with open("ranking.xlsx", "rb") as f:
-        st.download_button(
-            label="⬇️ Download als Excel",
-            data=f,
-            file_name="ranking.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
+# ---- Download als CSV ----
+df = pd.DataFrame(ranked, columns=["Song", "Elo Rating"])
+csv = df.to_csv(index=False).encode("utf-8")
+st.download_button("⬇️ Download als CSV", data=csv, file_name="ranking.csv", mime="text/csv")
