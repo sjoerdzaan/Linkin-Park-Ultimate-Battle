@@ -2,6 +2,7 @@ import streamlit as st
 import random
 import pandas as pd
 import math
+from io import BytesIO
 
 # ---- Playlist (103 nummers) ----
 songs = [
@@ -110,14 +111,13 @@ songs = [
     "In Pieces – Linkin Park",
 ]
 
-# ---- Elo instellingen ----
-K = 32  # hoe sterk ratings veranderen
+K = 32  # Elo K-factor
 
 # ---- Init state ----
 if "ratings" not in st.session_state:
     st.session_state.ratings = {song: 1000 for song in songs}
-if "history" not in st.session_state:
-    st.session_state.history = []
+if "last_battle" not in st.session_state:
+    st.session_state.last_battle = random.sample(songs, 2)
 
 def elo_update(winner, loser):
     Ra = st.session_state.ratings[winner]
@@ -130,25 +130,44 @@ def elo_update(winner, loser):
 st.title("🎶 Linkin Park Playlist Battle (Elo Ranking)")
 
 # ---- Battle ----
-a, b = random.sample(songs, 2)
-st.write("Kies welke je beter vindt:")
+a, b = st.session_state.last_battle
+st.subheader("Kies welke je beter vindt:")
 col1, col2 = st.columns(2)
+
 if col1.button(a):
     elo_update(a, b)
-    st.session_state.history.append((a, b))
+    st.session_state.last_battle = random.sample(songs, 2)
     st.rerun()
+
 if col2.button(b):
     elo_update(b, a)
-    st.session_state.history.append((b, a))
+    st.session_state.last_battle = random.sample(songs, 2)
     st.rerun()
 
-# ---- Huidige ranking ----
+# ---- Ranking ----
 st.subheader("📊 Huidige ranking")
 ranked = sorted(st.session_state.ratings.items(), key=lambda x: x[1], reverse=True)
-for i, (song, rating) in enumerate(ranked, 1):
-    st.write(f"{i}. {song} ({int(rating)} Elo)")
-
-# ---- Download als CSV ----
 df = pd.DataFrame(ranked, columns=["Song", "Elo Rating"])
+st.dataframe(df, use_container_width=True)
+
+# ---- Download CSV ----
 csv = df.to_csv(index=False).encode("utf-8")
-st.download_button("⬇️ Download als CSV", data=csv, file_name="ranking.csv", mime="text/csv")
+st.download_button(
+    "⬇️ Download als CSV",
+    data=csv,
+    file_name="ranking.csv",
+    mime="text/csv",
+)
+
+# ---- Download Excel ----
+output = BytesIO()
+with pd.ExcelWriter(output, engine="openpyxl") as writer:
+    df.to_excel(writer, index=False, sheet_name="Ranking")
+excel_data = output.getvalue()
+
+st.download_button(
+    "⬇️ Download als Excel",
+    data=excel_data,
+    file_name="ranking.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+)
